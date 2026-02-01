@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.html
+*.png
+data/
+models/__pycache__/
+nul
+.claude/
+additional_pics/

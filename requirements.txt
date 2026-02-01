@@ -1,0 +1,12 @@
+requests
+pandas
+plotly
+fmiopendata
+python-dotenv
+scikit-learn
+
+# Optional — for price forecasting (install the ones you want)
+statsmodels>=0.14.0
+xgboost>=2.0.0
+# torch>=2.0.0  # Uncomment for LSTM model (large download)
+rich>=13.0.0    # Rich dashboard (sahko dash)

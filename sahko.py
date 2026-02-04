@@ -10,6 +10,9 @@ Usage:
     python sahko.py week         # Weekly summary only
     python sahko.py reservoir    # Nordic hydro reservoir levels
     python sahko.py fuel         # European fuel & carbon prices
+    python sahko.py table        # Hourly table view
+    python sahko.py dash         # Rich dashboard
+    python sahko.py --vat        # Include VAT (24%) in prices
 """
 
 import sys
@@ -30,11 +33,15 @@ from datetime import datetime, timedelta, timezone
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from config import FINGRID_API_KEY, FINGRID_API_URL, ENTSOE_API_KEY, OILPRICE_API_KEY
+from config import (
+    FINGRID_API_KEY, FINGRID_API_URL, ENTSOE_API_KEY, OILPRICE_API_KEY,
+    BALANCING_UP_REGULATION_PRICE, BALANCING_DOWN_REGULATION_PRICE, VAT_RATE,
+)
 
 # ── Language / i18n ───────────────────────────────────────────────
 
 _LANG = "fi"  # default; set to "en" via --lang en
+_INCLUDE_VAT = False  # default; set to True via --vat flag
 
 _STRINGS = {
     "fi": {
@@ -127,6 +134,8 @@ _STRINGS = {
         "col_change": "Muutos",
         "col_wind": "Tuuli",
         "col_consumption": "Kulutus",
+        "col_bal_up": "Sään.↑",
+        "col_bal_down": "Sään.↓",
         "col_recommendation": "Suositus",
         "table_loading": "Haetaan dataa...",
         "table_no_prices": "Ei hintatietoja saatavilla.",
@@ -250,6 +259,8 @@ _STRINGS = {
         "col_change": "Change",
         "col_wind": "Wind",
         "col_consumption": "Demand",
+        "col_bal_up": "Bal.↑",
+        "col_bal_down": "Bal.↓",
         "col_recommendation": "Rating",
         "table_loading": "Fetching data...",
         "table_no_prices": "No price data available.",
@@ -448,7 +459,10 @@ def _fmt_price(eur_mwh):
     """EUR/MWh → snt/kWh string."""
     if eur_mwh is None:
         return "N/A"
-    return f"{eur_mwh / 10:.1f}"
+    price = eur_mwh / 10
+    if _INCLUDE_VAT:
+        price = price * (1 + VAT_RATE)
+    return f"{price:.1f}"
 
 
 def _fmt_mw(mw):
@@ -513,8 +527,9 @@ def section_now(prices_today, wind_df, cons_df, nuc_df, temp_now, temp_1h_ago):
 
     nuc_pct = f"({nuc_now / 4400 * 100:.0f}%)" if nuc_now is not None else ""
 
+    vat_suffix = " sis.ALV" if _INCLUDE_VAT else ""
     print(f"\n\U0001f4ca {_t('right_now')} ({now.strftime('%H:%M')})")
-    print(f"\u251c\u2500 {_t('spot_price')+':':<16}{price_snt if price_snt is not None else 'N/A':>8} snt/kWh  "
+    print(f"\u251c\u2500 {_t('spot_price')+':':<16}{price_snt if price_snt is not None else 'N/A':>8} snt/kWh{vat_suffix}  "
           f"{_arrow(price_snt, price_snt_1h)} {_signed(price_diff) if price_diff is not None else ''}")
     print(f"\u251c\u2500 {_t('consumption')+':':<16}{_fmt_mw(cons_now):>8} MW     "
           f"{_arrow(cons_now, cons_1h)} {_signed(cons_diff, ' MW', 0) if cons_diff is not None else ''}")
@@ -549,9 +564,10 @@ def section_today(prices_today, prices_yesterday):
     is_cheapest_now = (cheapest_hour == now.hour)
 
     pct_str = f"({_signed(pct_change, '%', 0)} {_t('vs_yesterday')})" if pct_change is not None else ""
+    vat_suffix = " sis.ALV" if _INCLUDE_VAT else ""
 
     print(f"\n\u26a1 {_t('today_avg')}")
-    print(f"\u251c\u2500 {_t('price')+':':<16}{_fmt_price(avg_today):>8} snt/kWh  {pct_str}")
+    print(f"\u251c\u2500 {_t('price')+':':<16}{_fmt_price(avg_today):>8} snt/kWh{vat_suffix}  {pct_str}")
     print(f"\u251c\u2500 {_t('cheapest_hour')+':':<16}{_fmt_price(cheapest['price']):>8} snt @ {cheapest_hour:02d}:00"
           f"{'  \u2713 ' + _t('now_marker') if is_cheapest_now else ''}")
     print(f"\u2514\u2500 {_t('most_expensive')+':':<16}{_fmt_price(most_exp['price']):>8} snt @ {most_exp_hour:02d}:00")
@@ -576,8 +592,9 @@ def section_tomorrow(prices_tomorrow, temp_forecast, wind_forecast, prices_today
     cheapest_hour = cheapest["timestamp"].astimezone(_FI_TZ).hour
 
     pct_str = f"{_arrow(avg_tomorrow, avg_today)} {_signed(pct_change, '%', 0)}" if pct_change is not None else ""
+    vat_suffix = " sis.ALV" if _INCLUDE_VAT else ""
 
-    print(f"\u251c\u2500 {_t('avg_price')+':':<16}{_fmt_price(avg_tomorrow):>8} snt/kWh  {pct_str}")
+    print(f"\u251c\u2500 {_t('avg_price')+':':<16}{_fmt_price(avg_tomorrow):>8} snt/kWh{vat_suffix}  {pct_str}")
     print(f"\u251c\u2500 {_t('cheapest_hour')+':':<16}{_fmt_price(cheapest['price']):>8} snt @ {cheapest_hour:02d}:00")
 
     if not wind_forecast.empty:
@@ -613,6 +630,7 @@ def section_tomorrow(prices_tomorrow, temp_forecast, wind_forecast, prices_today
 
 def section_recommendations(prices_today, prices_tomorrow):
     now = _fi_now()
+    vat_multiplier = (1 + VAT_RATE) if _INCLUDE_VAT else 1.0
     print(f"\n\U0001f4a1 {_t('recommendations')}")
 
     recs = []
@@ -624,9 +642,10 @@ def section_recommendations(prices_today, prices_tomorrow):
         if not remaining.empty:
             cheapest = remaining.loc[remaining["price"].idxmin()]
             cheapest_hour = cheapest["timestamp"].astimezone(_FI_TZ).hour
-            cheap_price = cheapest["price"] / 10
+            cheap_price = cheapest["price"] / 10 * vat_multiplier
 
-            if cheap_price < 5:
+            threshold = 5 * vat_multiplier
+            if cheap_price < threshold:
                 if cheapest_hour == now.hour:
                     recs.append(f"\u2705 {_t('charge_now')} ({cheap_price:.1f} snt)")
                 else:
@@ -635,15 +654,17 @@ def section_recommendations(prices_today, prices_tomorrow):
             expensive = remaining.nlargest(3, "price")
             exp_hours = sorted(expensive["timestamp"].dt.tz_convert(_FI_TZ).dt.hour.tolist())
             if len(exp_hours) >= 2:
-                exp_price = expensive["price"].mean() / 10
-                if exp_price > 8:
+                exp_price = expensive["price"].mean() / 10 * vat_multiplier
+                threshold_high = 8 * vat_multiplier
+                if exp_price > threshold_high:
                     recs.append(f"\u26a0\ufe0f  {_t('avoid_consumption')} {exp_hours[0]:02d}-{exp_hours[-1]+1:02d} ({exp_price:.0f} snt)")
 
     if not prices_tomorrow.empty:
         cheapest_tm = prices_tomorrow.loc[prices_tomorrow["price"].idxmin()]
         cheapest_hour_tm = cheapest_tm["timestamp"].astimezone(_FI_TZ).hour
-        cheap_price_tm = cheapest_tm["price"] / 10
-        if cheap_price_tm < 5:
+        cheap_price_tm = cheapest_tm["price"] / 10 * vat_multiplier
+        threshold = 5 * vat_multiplier
+        if cheap_price_tm < threshold:
             recs.append(f"\u2705 {_t('heat_sauna')} {cheapest_hour_tm:02d}-{cheapest_hour_tm+2:02d} ({cheap_price_tm:.1f} snt)")
 
         avg_tm = prices_tomorrow["price"].mean() / 10
@@ -693,7 +714,8 @@ def section_week(prices_week):
     else:
         vol = _t("vol_high")
 
-    print(f"\u251c\u2500 {_t('avg_price_label')+':':<17}{avg:>7.1f} snt/kWh")
+    vat_suffix = " sis.ALV" if _INCLUDE_VAT else ""
+    print(f"\u251c\u2500 {_t('avg_price_label')+':':<17}{avg:>7.1f} snt/kWh{vat_suffix}")
     print(f"\u251c\u2500 {_t('volatility')+':':<17}{vol:>7}")
     print(f"\u2514\u2500 {_t('trend')+':':<17}{trend:>7}")
 
@@ -1122,10 +1144,11 @@ def _price_bar_chart(prices_df, width: int = 52) -> str:
     if prices_df.empty:
         return f"  {_t('no_price_data')}"
 
+    vat_multiplier = (1 + VAT_RATE) if _INCLUDE_VAT else 1.0
     now_hour = _fi_now().hour
     df = prices_df.copy()
     df["hour"] = df["timestamp"].dt.tz_convert(_FI_TZ).dt.hour
-    df["snt"] = df["price"] / 10
+    df["snt"] = df["price"] / 10 * vat_multiplier
     df = df.sort_values("hour")
 
     max_price = max(df["snt"].max(), 1)
@@ -1175,6 +1198,7 @@ def _price_bar_chart(prices_df, width: int = 52) -> str:
 def _build_alerts(prices_today, prices_tomorrow, temp_forecast) -> list[str]:
     """Build alert/recommendation strings."""
     now = _fi_now()
+    vat_multiplier = (1 + VAT_RATE) if _INCLUDE_VAT else 1.0
     alerts = []
 
     if not prices_today.empty:
@@ -1184,17 +1208,19 @@ def _build_alerts(prices_today, prices_tomorrow, temp_forecast) -> list[str]:
         if not remaining.empty:
             cheapest = remaining.loc[remaining["price"].idxmin()]
             cheapest_hour = cheapest["timestamp"].astimezone(_FI_TZ).hour
-            cheap_snt = cheapest["price"] / 10
+            cheap_snt = cheapest["price"] / 10 * vat_multiplier
 
-            if cheap_snt < 5 and cheapest_hour == now.hour:
+            threshold = 5 * vat_multiplier
+            if cheap_snt < threshold and cheapest_hour == now.hour:
                 alerts.append(f"[green]✅ {_t('cheap_hour_now')} ({cheapest_hour:02d}-{cheapest_hour+1:02d})[/green]")
-            elif cheap_snt < 5:
+            elif cheap_snt < threshold:
                 alerts.append(f"[green]✅ {_t('cheap_hour_at')} {cheapest_hour:02d}:00 ({cheap_snt:.1f} snt)[/green]")
 
             expensive = remaining.nlargest(3, "price")
-            exp_price = expensive["price"].mean() / 10
+            exp_price = expensive["price"].mean() / 10 * vat_multiplier
             exp_hours = sorted(expensive["timestamp"].dt.tz_convert(_FI_TZ).dt.hour.tolist())
-            if exp_price > 8 and len(exp_hours) >= 2:
+            threshold_high = 8 * vat_multiplier
+            if exp_price > threshold_high and len(exp_hours) >= 2:
                 alerts.append(f"[yellow]⚠️  {_t('expensive_coming')} ({exp_hours[0]:02d}:00)[/yellow]")
 
     if not prices_tomorrow.empty and not prices_today.empty:
@@ -1247,17 +1273,18 @@ def rich_dashboard():
     )
 
     # ── Left panel: SPOT-HINTA ──
+    vat_multiplier = (1 + VAT_RATE) if _INCLUDE_VAT else 1.0
     price_now, _ = _latest_value(data["prices_today"])
     price_1h = _hour_ago_value(data["prices_today"])
-    snt_now = price_now / 10 if price_now is not None else None
-    snt_1h = price_1h / 10 if price_1h is not None else None
+    snt_now = (price_now / 10 * vat_multiplier) if price_now is not None else None
+    snt_1h = (price_1h / 10 * vat_multiplier) if price_1h is not None else None
     price_diff = (snt_now - snt_1h) if snt_now is not None and snt_1h is not None else None
 
-    avg_today = data["prices_today"]["price"].mean() / 10 if not data["prices_today"].empty else None
-    avg_yesterday = data["prices_yesterday"]["price"].mean() / 10 if not data["prices_yesterday"].empty else None
+    avg_today = (data["prices_today"]["price"].mean() / 10 * vat_multiplier) if not data["prices_today"].empty else None
+    avg_yesterday = (data["prices_yesterday"]["price"].mean() / 10 * vat_multiplier) if not data["prices_yesterday"].empty else None
     today_pct = ((avg_today - avg_yesterday) / avg_yesterday * 100) if avg_today and avg_yesterday else None
 
-    avg_tomorrow = data["prices_tomorrow"]["price"].mean() / 10 if not data["prices_tomorrow"].empty else None
+    avg_tomorrow = (data["prices_tomorrow"]["price"].mean() / 10 * vat_multiplier) if not data["prices_tomorrow"].empty else None
     tomorrow_pct = ((avg_tomorrow - avg_today) / avg_today * 100) if avg_tomorrow and avg_today else None
 
     def _arrow_rich(val, ref):
@@ -1297,7 +1324,7 @@ def rich_dashboard():
     # Sparkline for 24h trend
     if not data["prices_today"].empty:
         df_sp = data["prices_today"].copy()
-        df_sp["snt"] = df_sp["price"] / 10
+        df_sp["snt"] = df_sp["price"] / 10 * vat_multiplier
         vals = df_sp["snt"].values
         mn, mx = vals.min(), vals.max()
         rng = mx - mn if mx > mn else 1
@@ -1314,9 +1341,10 @@ def rich_dashboard():
     while len(price_lines) < 7:
         price_lines.append("")
 
+    vat_label = " (sis.ALV)" if _INCLUDE_VAT else ""
     price_panel = Panel(
         "\n".join(price_lines),
-        title=f"[bold]{_t('spot_price_panel')}[/bold]",
+        title=f"[bold]{_t('spot_price_panel')}{vat_label}[/bold]",
         box=box.ROUNDED,
         width=40,
         padding=(0, 1),
@@ -1573,6 +1601,8 @@ def table_view(hours: int = 24):
     def ts(dt):
         return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    vat_multiplier = (1 + VAT_RATE) if _INCLUDE_VAT else 1.0
+
     with console.status(f"[bold cyan]{_t('table_loading')}", spinner="dots"):
         prices = _quiet_spot(ts(fetch_start), ts(fetch_end))
 
@@ -1591,6 +1621,10 @@ def table_view(hours: int = 24):
         # Forecasted wind & consumption
         wind_fc = _quiet_fingrid(245, fc_start, fc_end)
         cons_fc = _quiet_fingrid(166, fc_start, fc_end)
+
+        # Balancing power prices (historical + current)
+        bal_up = _quiet_fingrid(BALANCING_UP_REGULATION_PRICE, hist_start, fc_end)
+        bal_down = _quiet_fingrid(BALANCING_DOWN_REGULATION_PRICE, hist_start, fc_end)
 
     if prices.empty:
         console.print(f"[red]{_t('table_no_prices')}[/red]")
@@ -1625,6 +1659,8 @@ def table_view(hours: int = 24):
 
     wind_lookup = _hour_lookup(wind_all)
     cons_lookup = _hour_lookup(cons_all)
+    bal_up_lookup = _hour_lookup(bal_up)
+    bal_down_lookup = _hour_lookup(bal_down)
 
     # Filter prices to the requested window
     prices["hour_utc"] = prices["timestamp"].dt.floor("h")
@@ -1638,10 +1674,11 @@ def table_view(hours: int = 24):
         console.print(f"[red]{_t('table_no_range')}[/red]")
         return
 
-    avg_price = prices["price"].mean() / 10
+    avg_price = (prices["price"].mean() / 10) * vat_multiplier
+    vat_label = " (sis.ALV)" if _INCLUDE_VAT else ""
 
     table = Table(
-        title=f"{_t('table_title')} {hours}H",
+        title=f"{_t('table_title')} {hours}H{vat_label}",
         box=box.SIMPLE_HEAVY,
         title_style="bold bright_white",
         header_style="bold",
@@ -1652,12 +1689,14 @@ def table_view(hours: int = 24):
     table.add_column(_t("col_change"), justify="right", min_width=8)
     table.add_column(_t("col_wind"), justify="right", min_width=6)
     table.add_column(_t("col_consumption"), justify="right", min_width=7)
+    table.add_column(_t("col_bal_up"), justify="right", min_width=7)
+    table.add_column(_t("col_bal_down"), justify="right", min_width=7)
     table.add_column(_t("col_recommendation"), justify="center", min_width=12)
 
     prev_price = None
     for _, row in prices.iterrows():
         hour_fi = row["timestamp"].astimezone(_FI_TZ)
-        snt = row["price"] / 10
+        snt = (row["price"] / 10) * vat_multiplier
         color = _price_color(snt)
 
         # Hour label: "1.2 15:00"
@@ -1687,6 +1726,35 @@ def table_view(hours: int = 24):
         cons_val = cons_lookup.get(row["hour_utc"])
         cons_str = f"{cons_val:,.0f}" if cons_val is not None else "[dim]–[/dim]"
 
+        # Balancing power prices
+        bal_up_val = bal_up_lookup.get(row["hour_utc"])
+        bal_down_val = bal_down_lookup.get(row["hour_utc"])
+
+        # Color code balancing prices relative to spot price
+        if bal_up_val is not None:
+            bal_up_snt = (bal_up_val / 10) * vat_multiplier
+            base_snt = snt
+            if bal_up_snt > base_snt * 1.5:
+                bal_up_str = f"[red]{bal_up_snt:.1f}[/red]"
+            elif bal_up_snt > base_snt * 1.2:
+                bal_up_str = f"[yellow]{bal_up_snt:.1f}[/yellow]"
+            else:
+                bal_up_str = f"{bal_up_snt:.1f}"
+        else:
+            bal_up_str = "[dim]–[/dim]"
+
+        if bal_down_val is not None:
+            bal_down_snt = (bal_down_val / 10) * vat_multiplier
+            base_snt = snt
+            if bal_down_snt < base_snt * 0.5:
+                bal_down_str = f"[green]{bal_down_snt:.1f}[/green]"
+            elif bal_down_snt < base_snt * 0.8:
+                bal_down_str = f"[cyan]{bal_down_snt:.1f}[/cyan]"
+            else:
+                bal_down_str = f"{bal_down_snt:.1f}"
+        else:
+            bal_down_str = "[dim]–[/dim]"
+
         label, label_color = _recommendation_label(snt, avg_price)
         if label == _t("rec_excellent"):
             rec_str = f"[{label_color}]✅✅ {label}[/{label_color}]"
@@ -1697,7 +1765,8 @@ def table_view(hours: int = 24):
         else:
             rec_str = f"[{label_color}]❌ {label}[/{label_color}]"
 
-        table.add_row(hour_label, price_str, change_str, wind_str, cons_str, rec_str)
+        table.add_row(hour_label, price_str, change_str, wind_str, cons_str,
+                     bal_up_str, bal_down_str, rec_str)
 
     console.print()
     console.print(table)
@@ -1709,8 +1778,8 @@ def table_view(hours: int = 24):
     max_hour = max_row["timestamp"].astimezone(_FI_TZ).strftime("%H:%M")
     console.print(
         f"  {_t('summary_avg')}: [bold]{avg_price:.1f} snt/kWh[/bold]  │  "
-        f"Min: [green]{min_row['price']/10:.1f}[/green] @ {min_hour}  │  "
-        f"Max: [red]{max_row['price']/10:.1f}[/red] @ {max_hour}"
+        f"Min: [green]{(min_row['price']/10)*vat_multiplier:.1f}[/green] @ {min_hour}  │  "
+        f"Max: [red]{(max_row['price']/10)*vat_multiplier:.1f}[/red] @ {max_hour}"
     )
     console.print()
 
@@ -1765,17 +1834,28 @@ def interactive_dashboard():
 
 
 if __name__ == "__main__":
+    # Start with all arguments
+    _argv = sys.argv[1:]
+
+    # Parse --vat flag first
+    if "--vat" in _argv:
+        _INCLUDE_VAT = True
+        _argv = [a for a in _argv if a != "--vat"]
+
     # Parse --lang flag (remove from argv so it doesn't interfere with mode)
-    _argv = [a for a in sys.argv[1:] if a != "--lang"]
-    for i, arg in enumerate(sys.argv[1:], start=1):
-        if arg == "--lang" and i + 1 < len(sys.argv):
-            _LANG = sys.argv[i + 1]
-            _argv = [a for a in _argv if a != sys.argv[i + 1] or a in ("today", "now", "tomorrow", "week", "dash", "live", "table", "reservoir", "fuel")]
+    _lang_val = None
+    for i, arg in enumerate(_argv):
+        if arg == "--lang" and i + 1 < len(_argv):
+            _lang_val = _argv[i + 1]
+            _argv = [a for j, a in enumerate(_argv) if j not in (i, i + 1)]
             break
+
     # Also support shorthand: sahko --en ...
     if "--en" in _argv:
         _LANG = "en"
         _argv = [a for a in _argv if a != "--en"]
+    elif _lang_val:
+        _LANG = _lang_val
 
     mode = _argv[0] if _argv else "today"
     if mode == "dash":
@@ -1814,5 +1894,5 @@ if __name__ == "__main__":
         dashboard(mode)
     else:
         print(f"Tuntematon komento: {mode}")
-        print("Usage: sahko [today|now|tomorrow|week|dash|live|table|reservoir|fuel] [--lang en] [--en]")
+        print("Usage: sahko [today|now|tomorrow|week|dash|live|table|reservoir|fuel] [--lang en] [--en] [--vat]")
         sys.exit(1)

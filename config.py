@@ -30,6 +30,11 @@ CHP_DISTRICT_HEATING_DATASET = 201
 CHP_INDUSTRIAL_DATASET = 202
 ELECTRIC_BOILER_DATASET = 371
 
+# Balancing power prices
+BALANCING_UP_REGULATION_PRICE = 209  # Up-regulation price (EUR/MWh) - mFRR up
+BALANCING_DOWN_REGULATION_PRICE = 210  # Down-regulation price (EUR/MWh) - mFRR down
+# Note: Down-regulation data (210) is often unavailable as down-reg events are less common
+
 # Fingrid forecast dataset IDs
 WIND_FORECAST_DATASET = 245
 CONSUMPTION_FORECAST_DATASET = 166
@@ -56,3 +61,14 @@ FORECAST_HORIZON_HOURS = 48
 TRAINING_DAYS = 90
 CONFIDENCE_LEVEL = 0.95
 MODEL_CACHE_DIR = os.path.join(DATA_DIR, "models")
+
+# Time resolution settings
+# RESOLUTION_MINUTES determines the granularity of predictions and features
+# Supported values: 15 (15-minute intervals) or 60 (hourly)
+# Note: Spot prices are typically published at 15-minute or hourly intervals
+RESOLUTION_MINUTES = 15  # 15-minute intervals (4 periods per hour)
+PERIODS_PER_HOUR = 60 // RESOLUTION_MINUTES  # 4 for 15-min, 1 for hourly
+
+# VAT settings
+# Finnish VAT rate for electricity is 24%
+VAT_RATE = 0.24  # 24%

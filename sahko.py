@@ -100,6 +100,8 @@ _STRINGS = {
         "wind": "Tuuli",
         "nuclear_short": "Ydin",
         "hydro": "Vesi",
+        "solar": "Aurinko",
+        "thermal": "Lämpö",
         "import": "Tuonti",
         "export": "Vienti",
         "total": "Yht",
@@ -225,6 +227,8 @@ _STRINGS = {
         "wind": "Wind",
         "nuclear_short": "Nucl",
         "hydro": "Hydro",
+        "solar": "Solar",
+        "thermal": "CHP",
         "import": "Import",
         "export": "Export",
         "total": "Total",
@@ -1255,6 +1259,9 @@ def rich_dashboard():
         data = fetch_all_data()
         # Extra data for rich dashboard
         hydro = _quiet_fingrid(191, *_rt_range())
+        solar = _quiet_fingrid(248, *_rt_range())
+        chp_dh = _quiet_fingrid(201, *_rt_range())
+        chp_ind = _quiet_fingrid(202, *_rt_range())
         net_import = _quiet_fingrid(194, *_rt_range())
         wind_speed = _quiet_fmi_wind_speed("Helsinki")
         cloud_cover = _quiet_fmi_cloud("Helsinki")
@@ -1354,11 +1361,18 @@ def rich_dashboard():
     wind_now, _ = _latest_value(data["wind"])
     nuc_now, _ = _latest_value(data["nuclear"])
     hydro_now, _ = _latest_value(hydro)
+    solar_now, _ = _latest_value(solar)
+    chp_dh_now, _ = _latest_value(chp_dh)
+    chp_ind_now, _ = _latest_value(chp_ind)
     cons_now, _ = _latest_value(data["consumption"])
     import_now, _ = _latest_value(net_import)
 
+    # Calculate thermal (CHP) production
+    thermal_now = sum(filter(None, [chp_dh_now, chp_ind_now]))
+    thermal_now = thermal_now if thermal_now > 0 else None
+
     # Compute percentages of consumption
-    total_domestic = sum(filter(None, [wind_now, nuc_now, hydro_now]))
+    total_domestic = sum(filter(None, [wind_now, nuc_now, hydro_now, solar_now, thermal_now]))
     import_val = max(0, import_now) if import_now is not None else 0
     total = total_domestic + import_val
 
@@ -1371,6 +1385,8 @@ def rich_dashboard():
     prod_lines.append(f"  [green]{_t('wind')}[/green]:{' '*(6-len(_t('wind')))}{_fmt_mw(wind_now):>7} MW {_pct(wind_now)}")
     prod_lines.append(f"  [yellow]{_t('nuclear_short')}[/yellow]:{' '*(6-len(_t('nuclear_short')))}{_fmt_mw(nuc_now):>7} MW {_pct(nuc_now)}")
     prod_lines.append(f"  [cyan]{_t('hydro')}[/cyan]:{' '*(6-len(_t('hydro')))}{_fmt_mw(hydro_now):>7} MW {_pct(hydro_now)}")
+    prod_lines.append(f"  [bright_yellow]{_t('solar')}[/bright_yellow]:{' '*(6-len(_t('solar')))}{_fmt_mw(solar_now):>7} MW {_pct(solar_now)}")
+    prod_lines.append(f"  [red]{_t('thermal')}[/red]:{' '*(6-len(_t('thermal')))}{_fmt_mw(thermal_now):>7} MW {_pct(thermal_now)}")
     if import_now is not None and import_now > 0:
         prod_lines.append(f"  [magenta]{_t('import')}[/magenta]:{' '*(6-len(_t('import')))}{_fmt_mw(import_now):>7} MW {_pct(import_now)}")
     elif import_now is not None:

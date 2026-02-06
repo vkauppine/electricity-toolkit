@@ -29,6 +29,9 @@ HYDRO_DATASET = 191
 CHP_DISTRICT_HEATING_DATASET = 201
 CHP_INDUSTRIAL_DATASET = 202
 ELECTRIC_BOILER_DATASET = 371
+SOLAR_POWER_DATASET = 248  # Solar power generation forecast (updated every 15 min)
+TOTAL_PRODUCTION_DATASET = 192  # Total electricity production in Finland (real-time)
+NET_IMPORT_EXPORT_DATASET = 194  # Net import/export of electricity (real-time)
 
 # Balancing power prices
 BALANCING_UP_REGULATION_PRICE = 209  # Up-regulation price (EUR/MWh) - mFRR up

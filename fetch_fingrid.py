@@ -16,6 +16,9 @@ from config import (
     CHP_DISTRICT_HEATING_DATASET,
     CHP_INDUSTRIAL_DATASET,
     ELECTRIC_BOILER_DATASET,
+    SOLAR_POWER_DATASET,
+    TOTAL_PRODUCTION_DATASET,
+    NET_IMPORT_EXPORT_DATASET,
     DATA_DIR,
 )
 
@@ -150,3 +153,29 @@ def fetch_chp_industrial(start: str, end: str) -> pd.DataFrame:
 def fetch_electric_boiler(start: str, end: str) -> pd.DataFrame:
     """Electric boiler consumption (MW). Dataset 371."""
     return _fetch_dataset(ELECTRIC_BOILER_DATASET, "electric boiler consumption", start, end)
+
+
+def fetch_solar_power(start: str, end: str) -> pd.DataFrame:
+    """Solar power production forecast (MW). Dataset 248.
+
+    Note: This is a forecast dataset updated every 15 minutes for the next 72 hours.
+    Fingrid does not publish actual solar production measurements separately.
+    """
+    return _fetch_dataset(SOLAR_POWER_DATASET, "solar power", start, end)
+
+
+def fetch_total_production(start: str, end: str) -> pd.DataFrame:
+    """Total electricity production in Finland (MW). Dataset 192.
+
+    Real-time measurements from Fingrid's operation control system, updated every 3 minutes.
+    """
+    return _fetch_dataset(TOTAL_PRODUCTION_DATASET, "total production", start, end)
+
+
+def fetch_net_import_export(start: str, end: str) -> pd.DataFrame:
+    """Net import/export of electricity (MW). Dataset 194.
+
+    Positive values = net import, negative values = net export.
+    Real-time measurements updated every 3 minutes.
+    """
+    return _fetch_dataset(NET_IMPORT_EXPORT_DATASET, "net import/export", start, end)

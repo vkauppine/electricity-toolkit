@@ -1,16 +1,65 @@
+# Environment and secrets
 .env
-__pycache__/
-*.html
-*.png
-data/
-models/__pycache__/
-nul
-.claude/
-additional_pics/
+.env.*
+!.env.example
+*.key
+*.secret
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
 
 # API Keys - DO NOT COMMIT
 fingrid.txt
 eia.txt
 oilpriceapi.txt
-*.key
-*.secret
+entsoe.txt
+*_api_key.txt
+*_token.txt
+credentials.json
+secrets.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+models/__pycache__/
+
+# Data and outputs
+data/
+*.csv
+*.xlsx
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated files
+*.html
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+nul
+
+# IDE and tools
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Additional
+additional_pics/
+temp/
+tmp/
+*.log
+*.bak

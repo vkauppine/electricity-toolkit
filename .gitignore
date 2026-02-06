@@ -7,3 +7,10 @@ models/__pycache__/
 nul
 .claude/
 additional_pics/
+
+# API Keys - DO NOT COMMIT
+fingrid.txt
+eia.txt
+oilpriceapi.txt
+*.key
+*.secret
